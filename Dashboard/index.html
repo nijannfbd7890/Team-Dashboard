@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Performance Dashboard</title>
+
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome for icons -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- XLSX.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    body {
+      background-color: #f4f6f9;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    .card {
+      border-radius: 15px;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+    }
+    .dashboard-header {
+      text-align: center;
+      margin: 30px 0;
+      font-weight: 600;
+    }
+    select {
+      border-radius: 10px;
+      padding: 5px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2 class="dashboard-header">Team Performance Dashboard</h2>
+
+    <!-- Month Filter -->
+    <div class="text-center mb-4">
+      <label class="fw-bold me-2">Select Month:</label>
+      <select id="monthFilter" class="form-select w-auto d-inline-block">
+        <option value="All">All</option>
+      </select>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-4 text-center">
+      <div class="col-md-3">
+        <div class="card p-3">
+          <i class="fa-solid fa-clock fa-2x text-primary mb-2"></i>
+          <h3 id="totalHours">0 h</h3>
+          <p>Total Hours</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card p-3">
+          <i class="fa-solid fa-chart-line fa-2x text-success mb-2"></i>
+          <h3 id="avgPerf">0%</h3>
+          <p>Average Performance</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card p-3">
+          <i class="fa-solid fa-users fa-2x text-warning mb-2"></i>
+          <h3 id="teamCount">0</h3>
+          <p>Team Members</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card p-3">
+          <i class="fa-solid fa-trophy fa-2x text-danger mb-2"></i>
+          <h3 id="topPerformer">-</h3>
+          <p>Top Performer</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="row mt-5">
+      <div class="col-md-6">
+        <div class="card p-4">
+          <h5>Hours by Team Member</h5>
+          <canvas id="barChart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card p-4">
+          <h5>Performance Trend by Month</h5>
+          <canvas id="lineChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script -->
+  <script>
+    let allData = [];
+    let barChart, lineChart;
+
+    // Load Excel automatically
+    window.onload = function() {
+      fetch('team_report.xlsx')
+        .then(response => response.arrayBuffer())
+        .then(data => {
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          allData = XLSX.utils.sheet_to_json(sheet);
+          populateMonthDropdown(allData);
+          updateDashboard('All');
+        })
+        .catch(err => alert("⚠️ Error loading Excel file. Ensure 'team_report.xlsx' is in the same folder."));
+    };
+
+    // Populate dropdown
+    function populateMonthDropdown(data) {
+      const months = [...new Set(data.map(d => d.Month))];
+      const dropdown = document.getElementById('monthFilter');
+      months.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        dropdown.appendChild(opt);
+      });
+      dropdown.addEventListener('change', e => updateDashboard(e.target.value));
+    }
+
+    // Update dashboard based on month
+    function updateDashboard(selectedMonth) {
+      let data = selectedMonth === 'All' ? allData : allData.filter(d => d.Month === selectedMonth);
+
+      const names = data.map(d => d.Name);
+      const hours = data.map(d => parseFloat(d.Hours));
+      const perf = data.map(d => parseFloat(d.Performance));
+
+      // KPIs
+      const totalHours = hours.reduce((a, b) => a + b, 0).toFixed(1);
+      const avgPerf = (perf.reduce((a, b) => a + b, 0) / perf.length || 0).toFixed(2);
+      const topIndex = perf.indexOf(Math.max(...perf));
+      const topPerformer = names[topIndex] || '-';
+
+      document.getElementById('totalHours').innerText = `${totalHours} h`;
+      document.getElementById('avgPerf').innerText = `${avgPerf}%`;
+      document.getElementById('teamCount').innerText = data.length;
+      document.getElementById('topPerformer').innerText = topPerformer;
+
+      // Bar Chart (Hours by Team Member)
+      if (barChart) barChart.destroy();
+      const barCtx = document.getElementById('barChart').getContext('2d');
+      barChart = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: names,
+          datasets: [{
+            label: 'Hours Worked',
+            data: hours,
+            backgroundColor: '#007bff'
+          }]
+        },
+        options: { responsive: true }
+      });
+
+      // Line Chart (Performance Trend by Month)
+      if (lineChart) lineChart.destroy();
+      const lineCtx = document.getElementById('lineChart').getContext('2d');
+      const monthlyData = getMonthlyPerformance();
+      lineChart = new Chart(lineCtx, {
+        type: 'line',
+        data: {
+          labels: monthlyData.labels,
+          datasets: [{
+            label: 'Average Performance (%)',
+            data: monthlyData.values,
+            borderColor: '#28a745',
+            fill: false,
+            tension: 0.3
+          }]
+        },
+        options: { responsive: true }
+      });
+    }
+
+    // Monthly Performance Trend
+    function getMonthlyPerformance() {
+      const grouped = {};
+      allData.forEach(d => {
+        if (!grouped[d.Month]) grouped[d.Month] = [];
+        grouped[d.Month].push(parseFloat(d.Performance));
+      });
+      const labels = Object.keys(grouped);
+      const values = labels.map(m => (grouped[m].reduce((a, b) => a + b, 0) / grouped[m].length).toFixed(2));
+      return { labels, values };
+    }
+  </script>
+</body>
+</html>
