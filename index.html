@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marketing Management Team Dashboard</title>
+
+  <!-- ✅ Libraries -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <!-- ✅ Styling -->
+      table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    th {
+      background-color: #0d6efd;
+      color: white;
+      cursor: pointer;
+    }
+
+    tr:hover {
+      background-color: #eef4ff;
+      cursor: pointer;
+    }
+
+    /* 👇 Add this new part */
+    td.text-primary.fw-semibold {
+      color: #0d6efd;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+      text-decoration: underline;
+    }
+
+    td.text-primary.fw-semibold:hover {
+      color: #084fc4;
+      text-decoration: underline;
+    }
+
+</head>
+
+<body>
+  <!-- ✅ Header -->
+  <header>
+    <h1>Marketing Management Team Dashboard</h1>
+    <p>Performance Analytics — July to November 2025</p>
+  </header>
+
+  <div class="container text-center">
+    <label class="fw-bold">📅 Select Month:</label>
+    <select id="monthFilter"><option value="All">All</option></select>
+
+    <input type="search" id="searchInput" placeholder="🔍 Search by name..." />
+
+    <div class="row g-4 mt-3">
+      <div class="col-md-3"><div class="card p-4"><h3 id="totalHours">0h</h3><p>Total Hours</p></div></div>
+      <div class="col-md-3"><div class="card p-4"><h3 id="avgPerf">0%</h3><p>Average Performance</p></div></div>
+      <div class="col-md-3"><div class="card p-4"><h3 id="teamCount">0</h3><p>Team Members</p></div></div>
+      <div class="col-md-3"><div class="card p-4"><h3 id="topPerformer">-</h3><p>Top Performer</p></div></div>
+    </div>
+
+    <div class="table-responsive mt-4">
+      <table id="teamTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Hours</th>
+            <th>Performance (%)</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <button id="backButton">← Back to Full Team View</button>
+
+    <div class="chart-container mt-4">
+      <canvas id="mainChart"></canvas>
+    </div>
+  </div>
+
+  <footer>© 2025 Marketing Team Dashboard — Interactive Insights</footer>
+
+  <div id="loadingOverlay">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-3 fw-semibold text-secondary">Loading data… please wait</p>
+  </div>
+
+  <script>
+    let allData = [];
+    let chartInstance;
+
+    const hideLoading = () => {
+      const overlay = document.getElementById("loadingOverlay");
+      overlay.style.transition = "opacity 0.5s ease";
+      overlay.style.opacity = "0";
+      setTimeout(() => (overlay.style.display = "none"), 500);
+    };
+
+    function populateMonths(data) {
+      const select = document.getElementById("monthFilter");
+      const months = [...new Set(data.map(d => (d.Month || "").trim()).filter(Boolean))];
+      months.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        select.appendChild(opt);
+      });
+    }
+
+    function updateDashboard(month, searchTerm = "") {
+      let filtered = month === "All" ? allData : allData.filter(d => d.Month === month);
+      filtered = filtered.filter(d => d.Name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      if (filtered.length === 0) return;
+
+      const perfKey = Object.keys(filtered[0]).find(k => k.toLowerCase().startsWith("perform")) || "Performance";
+      const totalHours = filtered.reduce((s, r) => s + (parseFloat(r.Hours) || 0), 0);
+      const avgPerf = filtered.reduce((s, r) => s + (parseFloat(r[perfKey]) || 0), 0) / filtered.length;
+      const top = filtered.reduce((a, b) => (parseFloat(a[perfKey]) > parseFloat(b[perfKey]) ? a : b));
+
+      document.getElementById("totalHours").innerText = totalHours.toFixed(1) + " h";
+      document.getElementById("avgPerf").innerText = isNaN(avgPerf) ? "0%" : avgPerf.toFixed(1) + "%";
+      document.getElementById("teamCount").innerText = filtered.length;
+      document.getElementById("topPerformer").innerText = `${top?.Name || "-"} — ${top?.[perfKey] || ""}%`;
+
+      renderTable(filtered, perfKey);
+      renderChart(filtered, perfKey);
+    }
+
+    function renderTable(data, perfKey) {
+      const tbody = document.querySelector("#teamTable tbody");
+      tbody.innerHTML = "";
+      data.forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="text-primary fw-semibold">${row.Name}</td>
+          <td>${row.Hours}</td>
+          <td>${row[perfKey]}</td>
+          <td>${row.Remarks || "Nil"}</td>
+        `;
+        tr.addEventListener("click", () => showIndividualReport(row, perfKey));
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderChart(data, perfKey) {
+      const ctx = document.getElementById("mainChart").getContext("2d");
+      const names = data.map(r => r.Name);
+      const hours = data.map(r => parseFloat(r.Hours) || 0);
+      const perfs = data.map(r => parseFloat(r[perfKey]) || 0);
+
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(ctx, {
+        data: {
+          labels: names,
+          datasets: [
+            { label: "Hours", type: "bar", data: hours, backgroundColor: "#0d6efd" },
+            { label: "Performance %", type: "line", data: perfs, borderColor: "#ffc107", borderWidth: 3, fill: false, tension: 0.3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "bottom" } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    function showIndividualReport(row, perfKey) {
+      const ctx = document.getElementById("mainChart").getContext("2d");
+      if (chartInstance) chartInstance.destroy();
+      document.getElementById("backButton").style.display = "block";
+
+      chartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: ["Hours", "Performance %"],
+          datasets: [
+            {
+              label: row.Name,
+              data: [parseFloat(row.Hours) || 0, parseFloat(row[perfKey]) || 0],
+              backgroundColor: ["#0d6efd", "#ffc107"]
+            }
+          ]
+        },
+        options: {
+          plugins: {
+            title: {
+              display: true,
+              text: `${row.Name} — Individual Report`,
+              font: { size: 18 }
+            }
+          },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    document.getElementById("backButton").addEventListener("click", () => {
+      document.getElementById("backButton").style.display = "none";
+      updateDashboard(document.getElementById("monthFilter").value, document.getElementById("searchInput").value);
+    });
+
+    Papa.parse("https://nijannfbd7890.github.io/Team-Dashboard/team_report.csv", {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        allData = results.data.map(r => {
+          const clean = {};
+          for (let k in r) clean[k.trim()] = (r[k] || "").trim();
+          return clean;
+        });
+        populateMonths(allData);
+        updateDashboard("All");
+        hideLoading();
+
+        document.getElementById("monthFilter").addEventListener("change", e =>
+          updateDashboard(e.target.value, document.getElementById("searchInput").value)
+        );
+
+        document.getElementById("searchInput").addEventListener("input", e =>
+          updateDashboard(document.getElementById("monthFilter").value, e.target.value)
+        );
+      }
+    });
+  </script>
+</body>
+</html>
