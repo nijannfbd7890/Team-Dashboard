@@ -103,7 +103,7 @@
 
     // Load Excel automatically
     window.onload = function() {
-      fetch('team_report.xlsx')
+      fetch('fetch('https://raw.githubusercontent.com/niijannfbd7890/team-dashboard/main/team_report.csv')')
         .then(response => response.arrayBuffer())
         .then(data => {
           const workbook = XLSX.read(data, { type: 'array' });
