@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team Performance Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body {
+      background-color: #f5f7fb;
+      font-family: "Segoe UI", sans-serif;
+    }
+    header {
+      background-color: #0d6efd;
+      color: white;
+      text-align: center;
+      padding: 1.5rem 0;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      border: none;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+    .card h3 {
+      font-size: 2rem;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Graphic Design Team Dashboard</h1>
+    <p>Performance Analytics — July to November 2025</p>
+  </header>
+
+  <div class="container text-center">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div class="card p-4">
+          <h3 id="totalHours">0h</h3>
+          <p>Total Hours</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card p-4">
+          <h3 id="avgPerf">0%</h3>
+          <p>Average Performance</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card p-4">
+          <h3 id="teamCount">0</h3>
+          <p>Team Members</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card p-4">
+          <h3 id="topPerformer">-</h3>
+          <p>Top Performer</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-5">
+      <canvas id="performanceChart" width="400" height="200"></canvas>
+    </div>
+  </div>
+
+  <script>
+    // Helper: convert "320:17:00" → total hours (number)
+    function timeToHours(timeStr) {
+      const [h, m, s] = timeStr.split(':').map(Number);
+      return h + (m / 60) + (s / 3600);
+    }
+
+    // Fetch and parse CSV
+    Papa.parse('team_report.csv', {
+      download: true,
+      header: true,
+      complete: function(results) {
+        const data = results.data;
+
+        // Calculate totals
+        const totalHours = data.reduce((sum, row) => sum + timeToHours(row.Hours || "0:0:0"), 0);
+        const avgPerf = data.reduce((sum, row) => sum + parseFloat(row.Performance.replace('%','')), 0) / data.length;
+        const top = data.reduce((a, b) => parseFloat(a.Performance) > parseFloat(b.Performance) ? a : b);
+
+        document.getElementById('totalHours').innerText = totalHours.toFixed(1) + ' h';
+        document.getElementById('avgPerf').innerText = avgPerf.toFixed(1) + '%';
+        document.getElementById('teamCount').innerText = data.length;
+        document.getElementById('topPerformer').innerText = top.Name;
+
+        // Chart: Hours by Team Member
+        const ctx = document.getElementById('performanceChart').getContext('2d');
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: data.map(r => r.Name),
+            datasets: [{
+              label: 'Total Hours',
+              data: data.map(r => timeToHours(r.Hours || "0:0:0")),
+              backgroundColor: '#0d6efd'
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
