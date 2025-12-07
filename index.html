@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team Performance Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body {
+      background-color: #f5f7fb;
+      font-family: "Segoe UI", sans-serif;
+    }
+    header {
+      background-color: #0d6efd;
+      color: white;
+      text-align: center;
+      padding: 1.5rem 0;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      border: none;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+    .card h3 {
+      font-size: 2rem;
+      margin: 0;
+    }
+    select {
+      margin: 10px auto;
+      display: block;
+      width: 200px;
+      padding: 5px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Marketing Management Team Dashboard</h1>
+    <p>Performance Analytics — July to November 2025</p>
+  </header>
+
+  <div class="container text-center">
+    <label for="monthFilter" class="fw-bold">Select Month:</label>
+    <select id="monthFilter">
+      <option value="All">All</option>
+    </select>
+
+    <div class="row g-3 mt-3">
+      <div class="col-md-3"><div class="card p-4"><h3 id="totalHours">0h</h3><p>Total Hours</p></div></div>
+      <div class="col-md-3"><div class="card p-4"><h3 id="avgPerf">0%</h3><p>Average Performance</p></div></div>
+      <div class="col-md-3"><div class="card p-4"><h3 id="teamCount">0</h3><p>Team Members</p></div></div>
+      <div class="col-md-3"><div class="card p-4"><h3 id="topPerformer">-</h3><p>Top Performer</p></div></div>
+    </div>
+
+    <div class="row mt-5">
+      <div class="col-md-6"><canvas id="hoursChart"></canvas></div>
+      <div class="col-md-6"><canvas id="perfPie"></canvas></div>
+    </div>
+  </div>
+
+  <script>
+  let allData = [];
+  let hoursChart, perfPie;
+
+  function updateDashboard(month) {
+    let filtered = month === "All" ? allData : allData.filter(d => d.Month === month);
+
+    if (filtered.length === 0) {
+      document.getElementById("totalHours").innerText = "0 h";
+      document.getElementById("avgPerf").innerText = "0%";
+      document.getElementById("teamCount").innerText = "0";
+      document.getElementById("topPerformer").innerText = "-";
+      return;
+    }
+
+    // Detect correct performance column (handles Performar or Performance)
+    const perfKey =
+      Object.keys(filtered[0]).find(k => k.trim().toLowerCase().startsWith("perform")) ||
+      "Performance";
+
+    const totalHours = filtered.reduce((sum, row) => sum + (parseFloat(row.Hours) || 0), 0);
+    const avgPerf =
+      filtered.reduce((sum, row) => sum + (parseFloat(row[perfKey]) || 0), 0) / filtered.length;
+
+    const top = filtered.reduce(
+      (a, b) => (parseFloat(a[perfKey] || 0) > parseFloat(b[perfKey] || 0) ? a : b),
+      {}
+    );
+
+    // Update main cards
+    document.getElementById("totalHours").innerText = totalHours.toFixed(1) + " h";
+    document.getElementById("avgPerf").innerText = isNaN(avgPerf) ? "0%" : avgPerf.toFixed(1) + "%";
+    document.getElementById("teamCount").innerText = filtered.length;
+
+    const topName = top?.Name || "-";
+    const topPerfValue = top?.[perfKey] ? parseFloat(top[perfKey]).toFixed(0) + "%" : "";
+    document.getElementById("topPerformer").innerText = topName + (topPerfValue ? " — " + topPerfValue : "");
+
+    // Prepare data for charts
+    const names = filtered.map(r => r.Name);
+    const hours = filtered.map(r => parseFloat(r.Hours) || 0);
+    const perfs = filtered.map(r => parseFloat(r[perfKey]) || 0);
+    const remarks = filtered.map(r => r.Remarks || "No Remark");
+
+    if (hoursChart) hoursChart.destroy();
+    if (perfPie) perfPie.destroy();
+
+    // Bar chart (Hours)
+    const ctx1 = document.getElementById("hoursChart").getContext("2d");
+    hoursChart = new Chart(ctx1, {
+      type: "bar",
+      data: {
+        labels: names,
+        datasets: [
+          {
+            label: "Total Hours",
+            data: hours,
+            backgroundColor: "#0d6efd",
+            borderRadius: 6
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 50 } } }
+      }
+    });
+
+    // Pie chart (Performance)
+    const ctx2 = document.getElementById("perfPie").getContext("2d");
+    perfPie = new Chart(ctx2, {
+      type: "pie",
+      data: {
+        labels: names.map((n, i) => `${n} (${remarks[i]})`),
+        datasets: [
+          {
+            label: "Performance %",
+            data: perfs,
+            backgroundColor: [
+              "#0d6efd",
+              "#198754",
+              "#ffc107",
+              "#dc3545",
+              "#6f42c1",
+              "#20c997",
+              "#fd7e14"
+            ]
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { boxWidth: 20, padding: 15 }
+          }
+        }
+      }
+    });
+  }
+
+  function populateMonths(data) {
+    const select = document.getElementById("monthFilter");
+    const months = [...new Set(data.map(d => (d.Month || "").trim()).filter(Boolean))];
+    months.forEach(m => {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      select.appendChild(opt);
+    });
+  }
+
+  // ✅ Load CSV file from GitHub Pages
+  Papa.parse("https://nijannfbd7890.github.io/Team-Dashboard/team_report.csv", {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: function(results) {
+      allData = results.data.map(row => {
+        const cleaned = {};
+        for (let key in row) cleaned[key.trim()] = (row[key] || "").trim();
+        return cleaned;
+      });
+      populateMonths(allData);
+      updateDashboard("All");
+
+      document.getElementById("monthFilter").addEventListener("change", e => {
+        updateDashboard(e.target.value);
+      });
+    },
+    error: function(err) {
+      console.error("Error loading CSV:", err);
+      alert("❌ Failed to load CSV. Check your file path or encoding.");
+    }
+  });
+</script>
+
+
+
+</body>
+
+</html>
